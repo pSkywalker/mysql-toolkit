@@ -1,0 +1,29 @@
+{
+  "name": "mysql-toolkit",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pSkywalker/mysql-toolkit.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/pSkywalker/mysql-toolkit/issues"
+  },
+  "homepage": "https://github.com/pSkywalker/mysql-toolkit#readme",
+  "dependencies": {
+    "mysql": "^2.18.1"
+  },
+  "devDependencies": {
+    "@types/mysql": "^2.15.27",
+    "@types/node": "^22.14.1",
+    "typescript": "^5.8.3"
+  }
+}
