@@ -1,4 +1,5 @@
 const mysql = require('mysql');
+import { Pool } from "mysql";
 
 import { DbEnv } from "../models/DbEnv";
 
@@ -6,13 +7,12 @@ import logger from "../models/Logger";
 import { QueryResult } from "../models/QueryResult";
 import { MultiInsertResult } from "../models/MultiInsertResult";
 import { TransactionResult } from "../models/TransactionResult";
-import { SequentialQueryObject, SequentialQueryResult } from "../models/SequentialQueryResult";
+import { SequentialQueryResult } from "../models/SequentialQueryResult";
 
 
 export class Db_mysql1{ 
 
-
-    private db : any;
+    public db : Pool;
 
     constructor(dbConfig : DbEnv ){ 
 
@@ -44,21 +44,21 @@ export class Db_mysql1{
                     throw new Error();
                 }
                 logger.info(logs); 
+                logger.info({ results: results, fields: fields });
                 resolve( { results: results, fields: fields } );
             })
         }) 
     }
-
   
     public async transactionItem(connection: any, query: string, params : string[], log: string ) : Promise<TransactionResult>{ 
         return new Promise< TransactionResult > ( ( resolve , reject )  => {
             connection.query( query, params , function( error: any, results: any, fields: any ) {
                 logger.info( log );
+                logger.info({ error, results, fields });
                 resolve( { error, results, fields } );
             });
         });
     }
-
 
     public async multiInsert( queries: string[], params : any , logs: string [] ) : Promise<MultiInsertResult>{ 
         return new Promise< MultiInsertResult > ( (resolve, reject ) => { 
@@ -84,7 +84,6 @@ export class Db_mysql1{
                         for( let y = 0; y < params[x].length; y++ ){
                             
                             if( Array.isArray( params[x][y] ) ){
-                                                        console.log( params[x][y] );
                                 switch( params[x][y][1] ){
                                                             case "insertId":
                                     logger.info( transactionResults );
@@ -111,8 +110,8 @@ export class Db_mysql1{
                         if( error ) { logger.error( error ) ; connection.rollback(); queriesValid = false }
                         else { transactionResults.push( results ) }			
                     } 
-                    if( queriesValid ){ connection.commit(); resolve( { queryExecuted: true, results: transactionResults } ) }
-                    else{ resolve( { queryExecuted : false } ) }
+                    if( queriesValid ){ connection.commit(); logger.info({ queryExecuted: true, results: transactionResults }); resolve( { queryExecuted: true, results: transactionResults } ) }
+                    else{ logger.error( { queryExecuted: false } ); resolve( { queryExecuted : false } ) }
                 });			
             })  
         
@@ -123,29 +122,28 @@ export class Db_mysql1{
 
         return new Promise<QueryResult<T>>( ( resolve , reject ) => { 
 
-            console.log( logs  );
+            logger.info( logs );
             this.db.query({
                 sql: query,
                 timeout: 40000,
                 values: params
             }, (error: any , results: any, fields: any ) => {
                 if( error ){ 
-                    console.log( {
+                    logger.error( {
                         code : error.code,
                         sql: error.sql,
                         msg: error.sqlMessage
                     } );
                     throw new Error();
                 }
-                console.log( logs ); 
+                logger.info( logs ); 
+                logger.info( { results: results, fields: fields } );
                 resolve( { results: results, fields: fields } );
             });
 
         } );        
 
     }
-
-    
     
     public async sequentialQuery<T>( queries : any, params: string[], logs: string[] /*, sequentialDependentKey: string*/ , returningObjectKeys : string[]) : Promise<SequentialQueryResult<T>>{ 
         return new Promise< SequentialQueryResult<T> >( ( resolve, reject ) => { 
@@ -166,9 +164,6 @@ export class Db_mysql1{
                     let promises = [];
                     for( let y = 1; y < queries.length; y++ ){ 
                         logger.info( logs[x] );
-//                      console.log( queries[y] );
-//			console.log( initialQ[ queries[y][1] ] )
-//			console.log( initialQ )
                         promises.push( this.singleQuery<T>( 
                             queries[y][0], logs, 
                             [ (initialQ.results[x] as any)[ queries[y][1] ] ]
@@ -178,7 +173,6 @@ export class Db_mysql1{
                         new Promise<any>( ( resolve, reject ) => { resolve(initialQ) } ),
                         ...promises
                     ] );
-                    //console.log( returnObj );
                         let obj : any = {};
                         for( let z = 0; z < returningObjectKeys.length; z++ ){ 
                             obj[returningObjectKeys[z]] = returnObj[z].results;
@@ -186,7 +180,7 @@ export class Db_mysql1{
                         returnArray.push( obj );
                     
                     
-//                    console.log( returnArray  );
+                    logger.info( returnArray );
                 }
 
                 resolve( 
@@ -195,9 +189,8 @@ export class Db_mysql1{
             } );
     
         } );
-    };
+    }
 
-    
 }
 
 //type returnable = Promise<[ { key : { results: [ {key : string } ] } } ]>;
