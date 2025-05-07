@@ -12,7 +12,7 @@ import { SequentialQueryResult } from "../models/SequentialQueryResult";
 
 export class Db_mysql1{ 
 
-    public db : Pool;
+    private db : Pool;
 
     constructor(dbConfig : DbEnv ){ 
 
@@ -70,12 +70,15 @@ export class Db_mysql1{
                                     sql: error.sql,
                                     msg: error.sqlMessage
                                 } );
-                    throw new Error();
+                    if (connection) {
+                        connection.release(); // Ensure the connection is released in case of error
+                    }
+                    return reject(new Error(`Failed to get database connection: ${error.message}`));;
                 }
                 connection.beginTransaction( async (err : any) => {
                     if( err ){ 
                         logger.error(err);
-                        throw new Error();
+                        return reject(new Error(error.sqlMessage))
                     }
                     let queriesValid = true;
                     let transactionResults = [];
@@ -134,7 +137,8 @@ export class Db_mysql1{
                         sql: error.sql,
                         msg: error.sqlMessage
                     } );
-                    throw new Error();
+                    
+                    return reject(new Error(`Query failed: ${error.sqlMessage}`));
                 }
                 logger.info( logs ); 
                 logger.info( { results: results, fields: fields } );
@@ -145,8 +149,8 @@ export class Db_mysql1{
 
     }
     
-    public async sequentialQuery<T>( queries : any, params: string[], logs: string[] /*, sequentialDependentKey: string*/ , returningObjectKeys : string[]) : Promise<SequentialQueryResult<T>>{ 
-        return new Promise< SequentialQueryResult<T> >( ( resolve, reject ) => { 
+    public async sequentialQuery<T>( queries : any, params: string[], logs: string[] /*, sequentialDependentKey: string*/ , returningObjectKeys : string[]) : Promise<SequentialQueryResult>{ 
+        return new Promise< SequentialQueryResult >( ( resolve, reject ) => { 
             this.db.getConnection( async ( error: any, connection: any ) => { 
                 if( error ){ 
                     logger.error( {
@@ -154,17 +158,20 @@ export class Db_mysql1{
                         sql: error.sql,
                         msg: error.sqlMessage
                     } );
-                    throw new Error();
+                    if (connection) {
+                        connection.release(); // Ensure the connection is released in case of error
+                    }
+                    return reject(new Error(error.sqlMessage));
                 }
 
                 let initialQ = await this.sequentialQueryPromiseWrapper<T>( connection , queries[0], logs[0], params );
-                connection.release();
+                
                 let returnArray = [];
                 for( let x = 0; x < initialQ.results.length; x++ ){
                     let promises = [];
                     for( let y = 1; y < queries.length; y++ ){ 
                         logger.info( logs[x] );
-                        promises.push( this.singleQuery<T>( 
+                        promises.push( this.singleQuery<any>( 
                             queries[y][0], logs, 
                             [ (initialQ.results[x] as any)[ queries[y][1] ] ]
                         ));
@@ -182,7 +189,9 @@ export class Db_mysql1{
                     
                     logger.info( returnArray );
                 }
-
+                if (connection) {
+                    connection.release(); // Ensure the connection is released in case of error
+                }
                 resolve( 
                     returnArray
                 )
