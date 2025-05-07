@@ -11,7 +11,7 @@ import { SequentialQueryResult } from "../models/SequentialQueryResult";
 
 
 export class Db_mysql1{ 
-
+transactionResults 
     private db : Pool;
 
     constructor(dbConfig : DbEnv ){ 
@@ -41,11 +41,14 @@ export class Db_mysql1{
                         sql: error.sql,
                         msg: error.sqlMessage
                     } );
-                    throw new Error();
+                    if( connection ){ 
+                        connection.release();
+                    }
+                    return reject(new Error(`Failed to get database connection: ${error.sqlMessage}`));
                 }
                 logger.info(logs); 
                 logger.info({ results: results, fields: fields });
-                resolve( { results: results, fields: fields } );
+                return resolve( { results: results, fields: fields } );
             })
         }) 
     }
@@ -55,7 +58,7 @@ export class Db_mysql1{
             connection.query( query, params , function( error: any, results: any, fields: any ) {
                 logger.info( log );
                 logger.info({ error, results, fields });
-                resolve( { error, results, fields } );
+                return resolve( { error, results, fields } );
             });
         });
     }
@@ -73,31 +76,36 @@ export class Db_mysql1{
                     if (connection) {
                         connection.release(); // Ensure the connection is released in case of error
                     }
-                    return reject(new Error(`Failed to get database connection: ${error.message}`));;
+                    return reject(new Error(`Failed to get database connection: ${error.sqlMessage}`));
                 }
                 connection.beginTransaction( async (err : any) => {
                     if( err ){ 
-                        logger.error(err);
-                        return reject(new Error(error.sqlMessage))
+                        logger.error( {
+                            code : err.code,
+                            sql: err.sql,
+                            msg: err.sqlMessage
+                        });
+                        if (connection) {
+                            connection.release(); // Ensure the connection is released in case of error
+                        }
+                        return reject(new Error(err.sqlMessage))
                     }
                     let queriesValid = true;
                     let transactionResults = [];
                     for( let x = 0; x < queries.length; x++){
 
                         for( let y = 0; y < params[x].length; y++ ){
-                            
                             if( Array.isArray( params[x][y] ) ){
                                 switch( params[x][y][1] ){
                                                             case "insertId":
-                                    logger.info( transactionResults );
                                                                         params[ x ][y] = transactionResults[ params[x][y][ 2 ] ].insertId;
                                                             break;
-                                                            deafult:
+                                                            default:
                                                                     params[ x ][y] = transactionResults[ params[x][y][2] ].results[ params[x][y][1] ];
                                                             break;
                                                         }
                                                 }
-                        }
+                            }
                         
                         //if( Array.isArray( params[x][y] && x != 0 ) ){ 
                         //	switch( params[x][1] ){ 
@@ -110,11 +118,26 @@ export class Db_mysql1{
                         //	}	
                         //}
                         let { error, results, fields } = await this.transactionItem(connection, queries[x] , params[x], logs[x] );	
-                        if( error ) { logger.error( error ) ; connection.rollback(); queriesValid = false }
-                        else { transactionResults.push( results ) }			
+                        if( error ) { 
+                            logger.error( error ) ;
+                             connection.rollback();
+                             x = queries.length; 
+                             queriesValid = false 
+                            }
+                        else { 
+                            transactionResults.push( results ) 
+                        }			
                     } 
-                    if( queriesValid ){ connection.commit(); logger.info({ queryExecuted: true, results: transactionResults }); resolve( { queryExecuted: true, results: transactionResults } ) }
-                    else{ logger.error( { queryExecuted: false } ); resolve( { queryExecuted : false } ) }
+                    if (queriesValid) {
+                        connection.commit();
+                        logger.info({ queryExecuted: true, results: transactionResults });
+                        connection.release();
+                        return resolve({ queryExecuted: true, results: transactionResults });
+                    } else {
+                        connection.rollback();
+                        connection.release();
+                        return reject(new Error("Error executing query"));
+                    }
                 });			
             })  
         
@@ -142,7 +165,7 @@ export class Db_mysql1{
                 }
                 logger.info( logs ); 
                 logger.info( { results: results, fields: fields } );
-                resolve( { results: results, fields: fields } );
+                return resolve( { results: results, fields: fields } );
             });
 
         } );        
@@ -189,10 +212,8 @@ export class Db_mysql1{
                     
                     logger.info( returnArray );
                 }
-                if (connection) {
-                    connection.release(); // Ensure the connection is released in case of error
-                }
-                resolve( 
+                connection.release(); // Ensure the connection is released in case of error
+                return resolve( 
                     returnArray
                 )
             } );
