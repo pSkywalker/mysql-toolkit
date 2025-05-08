@@ -11,7 +11,7 @@ import { SequentialQueryResult } from "../models/SequentialQueryResult";
 
 
 export class Db_mysql1{ 
-transactionResults 
+ 
     private db : Pool;
 
     constructor(dbConfig : DbEnv ){ 
@@ -163,7 +163,6 @@ transactionResults
                     
                     return reject(new Error(`Query failed: ${error.sqlMessage}`));
                 }
-                logger.info( logs ); 
                 logger.info( { results: results, fields: fields } );
                 return resolve( { results: results, fields: fields } );
             });
